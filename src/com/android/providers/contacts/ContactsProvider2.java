@@ -58,6 +58,7 @@ import android.content.OperationApplicationException;
 import android.content.SharedPreferences;
 import android.content.SyncAdapterType;
 import android.content.UriMatcher;
+import android.content.pm.PackageManager;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.Configuration;
 import android.database.CharArrayBuffer;
@@ -1821,6 +1822,7 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
 
     private HashMap<String, DataRowHandler> mDataRowHandlers;
     private ContactsDatabaseHelper mDbHelper;
+    private ContactsDatabaseHelper mAnonDbHelper;
 
     private NameSplitter mNameSplitter;
     private NameLookupBuilder mNameLookupBuilder;
@@ -1872,13 +1874,15 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
     private boolean initialize() {
         final Context context = getContext();
         mDbHelper = (ContactsDatabaseHelper)getDatabaseHelper();
+        mAnonDbHelper = (ContactsDatabaseHelper)getAnonDatabaseHelper();
         mGlobalSearchSupport = new GlobalSearchSupport(this);
-        mLegacyApiSupport = new LegacyApiSupport(context, mDbHelper, this, mGlobalSearchSupport);
+        mLegacyApiSupport = new LegacyApiSupport(context, mDbHelper, mAnonDbHelper, this, mGlobalSearchSupport);
         mContactAggregator = new ContactAggregator(this, mDbHelper,
                 createPhotoPriorityResolver(context));
         mContactAggregator.setEnabled(SystemProperties.getBoolean(AGGREGATE_CONTACTS, true));
 
         mDb = mDbHelper.getWritableDatabase();
+        mAnonDb = mAnonDbHelper.getWritableDatabase();
 
         initForDefaultLocale();
 
@@ -2112,6 +2116,12 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
     @Override
     protected ContactsDatabaseHelper getDatabaseHelper(final Context context) {
         return ContactsDatabaseHelper.getInstance(context);
+    }
+
+    /* Visible for testing */
+    @Override
+    protected ContactsDatabaseHelper getAnonDatabaseHelper(final Context context) {
+        return AnonContactsDatabaseHelper.getInstance(context);
     }
 
     /* package */ NameSplitter getNameSplitter() {
@@ -4198,8 +4208,15 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
         if (VERBOSE_LOGGING) {
             Log.v(TAG, "query: " + uri);
         }
-
-        final SQLiteDatabase db = mDbHelper.getReadableDatabase();
+        ContactsDatabaseHelper dbHelper = null;
+        if (getContext().pffCheckCallingOrSelfPermission(android.Manifest.permission.READ_CONTACTS) 
+                != PackageManager.PERMISSION_GRANTED) {
+            dbHelper = mAnonDbHelper;
+        }
+        else {
+            dbHelper = mDbHelper;
+        }
+        final SQLiteDatabase db = dbHelper.getReadableDatabase();
 
         SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
         String groupBy = null;
@@ -4210,7 +4227,7 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
         final int match = sUriMatcher.match(uri);
         switch (match) {
             case SYNCSTATE:
-                return mDbHelper.getSyncState().query(db, projection, selection,  selectionArgs,
+                return dbHelper.getSyncState().query(db, projection, selection,  selectionArgs,
                         sortOrder);
 
             case CONTACTS: {
@@ -4231,7 +4248,7 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
                 List<String> pathSegments = uri.getPathSegments();
                 int segmentCount = pathSegments.size();
                 if (segmentCount < 3) {
-                    throw new IllegalArgumentException(mDbHelper.exceptionMessage(
+                    throw new IllegalArgumentException(dbHelper.exceptionMessage(
                             "Missing a lookup key", uri));
                 }
                 String lookupKey = pathSegments.get(2);
@@ -4269,7 +4286,7 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
             case CONTACTS_AS_VCARD: {
                 // When reading as vCard always use restricted view
                 final String lookupKey = Uri.encode(uri.getPathSegments().get(2));
-                qb.setTables(mDbHelper.getContactView(true /* require restricted */));
+                qb.setTables(dbHelper.getContactView(true /* require restricted */));
                 qb.setProjectionMap(sContactsVCardProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs,
                         String.valueOf(lookupContactIdByLookupKey(db, lookupKey)));
@@ -4455,7 +4472,7 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
                 qb.appendWhere(" AND " + Data.MIMETYPE + " = '" + Email.CONTENT_ITEM_TYPE + "'");
                 if (uri.getPathSegments().size() > 2) {
                     String email = uri.getLastPathSegment();
-                    String address = mDbHelper.extractAddressFromEmailAddress(email);
+                    String address = dbHelper.extractAddressFromEmailAddress(email);
                     selectionArgs = insertSelectionArg(selectionArgs, address);
                     qb.appendWhere(" AND UPPER(" + Email.DATA + ")=UPPER(?)");
                 }
@@ -4572,7 +4589,7 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
                 }
 
                 String number = uri.getPathSegments().size() > 1 ? uri.getLastPathSegment() : "";
-                mDbHelper.buildPhoneLookupAndContactQuery(qb, number);
+                dbHelper.buildPhoneLookupAndContactQuery(qb, number);
                 qb.setProjectionMap(sPhoneLookupProjectionMap);
 
                 // Phone lookup cannot be combined with a selection
@@ -4582,14 +4599,14 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
             }
 
             case GROUPS: {
-                qb.setTables(mDbHelper.getGroupView());
+                qb.setTables(dbHelper.getGroupView());
                 qb.setProjectionMap(sGroupsProjectionMap);
                 appendAccountFromParameter(qb, uri);
                 break;
             }
 
             case GROUPS_ID: {
-                qb.setTables(mDbHelper.getGroupView());
+                qb.setTables(dbHelper.getGroupView());
                 qb.setProjectionMap(sGroupsProjectionMap);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getLastPathSegment());
                 qb.appendWhere(Groups._ID + "=?");
@@ -4597,7 +4614,7 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
             }
 
             case GROUPS_SUMMARY: {
-                qb.setTables(mDbHelper.getGroupView() + " AS groups");
+                qb.setTables(dbHelper.getGroupView() + " AS groups");
                 qb.setProjectionMap(sGroupsSummaryProjectionMap);
                 appendAccountFromParameter(qb, uri);
                 groupBy = Groups._ID;
@@ -4636,14 +4653,14 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
 
                 // When requesting specific columns, this query requires
                 // late-binding of the GroupMembership MIME-type.
-                final String groupMembershipMimetypeId = Long.toString(mDbHelper
+                final String groupMembershipMimetypeId = Long.toString(dbHelper
                         .getMimeTypeId(GroupMembership.CONTENT_ITEM_TYPE));
                 if (projection != null && projection.length != 0 &&
-                        mDbHelper.isInProjection(projection, Settings.UNGROUPED_COUNT)) {
+                        dbHelper.isInProjection(projection, Settings.UNGROUPED_COUNT)) {
                     selectionArgs = insertSelectionArg(selectionArgs, groupMembershipMimetypeId);
                 }
                 if (projection != null && projection.length != 0 &&
-                        mDbHelper.isInProjection(projection, Settings.UNGROUPED_WITH_PHONES)) {
+                        dbHelper.isInProjection(projection, Settings.UNGROUPED_WITH_PHONES)) {
                     selectionArgs = insertSelectionArg(selectionArgs, groupMembershipMimetypeId);
                 }
 
@@ -4672,24 +4689,24 @@ public class ContactsProvider2 extends SQLiteContentProvider implements OnAccoun
             }
 
             case LIVE_FOLDERS_CONTACTS:
-                qb.setTables(mDbHelper.getContactView());
+                qb.setTables(dbHelper.getContactView());
                 qb.setProjectionMap(sLiveFoldersProjectionMap);
                 break;
 
             case LIVE_FOLDERS_CONTACTS_WITH_PHONES:
-                qb.setTables(mDbHelper.getContactView());
+                qb.setTables(dbHelper.getContactView());
                 qb.setProjectionMap(sLiveFoldersProjectionMap);
                 qb.appendWhere(Contacts.HAS_PHONE_NUMBER + "=1");
                 break;
 
             case LIVE_FOLDERS_CONTACTS_FAVORITES:
-                qb.setTables(mDbHelper.getContactView());
+                qb.setTables(dbHelper.getContactView());
                 qb.setProjectionMap(sLiveFoldersProjectionMap);
                 qb.appendWhere(Contacts.STARRED + "=1");
                 break;
 
             case LIVE_FOLDERS_CONTACTS_GROUP_NAME:
-                qb.setTables(mDbHelper.getContactView());
+                qb.setTables(dbHelper.getContactView());
                 qb.setProjectionMap(sLiveFoldersProjectionMap);
                 qb.appendWhere(CONTACTS_IN_GROUP_SELECT);
                 selectionArgs = insertSelectionArg(selectionArgs, uri.getLastPathSegment());

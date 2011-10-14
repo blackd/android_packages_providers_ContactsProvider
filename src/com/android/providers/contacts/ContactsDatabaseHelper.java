@@ -505,12 +505,15 @@ import java.util.Locale;
         return sSingleton;
     }
 
+    ContactsDatabaseHelper(Context context) {
+        this(context, DATABASE_NAME);
+    }
     /**
      * Private constructor, callers except unit tests should obtain an instance through
      * {@link #getInstance(android.content.Context)} instead.
      */
-    ContactsDatabaseHelper(Context context) {
-        super(context, DATABASE_NAME, null, DATABASE_VERSION);
+    ContactsDatabaseHelper(Context context, String dbName) {
+        super(context, dbName, null, DATABASE_VERSION);
         if (false) Log.i(TAG, "Creating OpenHelper");
         Resources resources = context.getResources();
 

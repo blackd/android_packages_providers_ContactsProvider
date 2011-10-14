@@ -23,6 +23,7 @@ import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.UriMatcher;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.sqlite.SQLiteDatabase;
@@ -68,6 +69,7 @@ public class CallLogProvider extends ContentProvider {
     }
 
     private ContactsDatabaseHelper mDbHelper;
+    private ContactsDatabaseHelper mAnonDbHelper;
     private DatabaseUtils.InsertHelper mCallsInserter;
     private boolean mUseStrictPhoneNumberComparation;
 
@@ -76,6 +78,7 @@ public class CallLogProvider extends ContentProvider {
         final Context context = getContext();
 
         mDbHelper = getDatabaseHelper(context);
+        mAnonDbHelper = getAnonDatabaseHelper(context);
         SQLiteDatabase db = mDbHelper.getWritableDatabase();
         mCallsInserter = new DatabaseUtils.InsertHelper(db, Tables.CALLS);
 
@@ -89,6 +92,10 @@ public class CallLogProvider extends ContentProvider {
     /* Visible for testing */
     protected ContactsDatabaseHelper getDatabaseHelper(final Context context) {
         return ContactsDatabaseHelper.getInstance(context);
+    }
+
+    protected ContactsDatabaseHelper getAnonDatabaseHelper(final Context context) {
+        return AnonContactsDatabaseHelper.getInstance(context);
     }
 
     @Override
@@ -124,8 +131,14 @@ public class CallLogProvider extends ContentProvider {
             default:
                 throw new IllegalArgumentException("Unknown URL " + uri);
         }
-
-        final SQLiteDatabase db = mDbHelper.getReadableDatabase();
+        SQLiteDatabase db;
+        if (getContext().pffCheckCallingOrSelfPermission(android.Manifest.permission.READ_CONTACTS) == 
+            PackageManager.PERMISSION_GRANTED) {
+             db = mDbHelper.getReadableDatabase();
+        }
+        else {
+            db = mAnonDbHelper.getReadableDatabase();
+        }
         Cursor c = qb.query(db, projection, selection, selectionArgs, null, null, sortOrder, null);
         if (c != null) {
             c.setNotificationUri(getContext().getContentResolver(), CallLog.CONTENT_URI);

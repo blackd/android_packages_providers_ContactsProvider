@@ -38,8 +38,10 @@ public abstract class SQLiteContentProvider extends ContentProvider
     private static final String TAG = "SQLiteContentProvider";
 
     private SQLiteOpenHelper mOpenHelper;
+    private SQLiteOpenHelper mAnonOpenHelper;
     private volatile boolean mNotifyChange;
     protected SQLiteDatabase mDb;
+    protected SQLiteDatabase mAnonDb;
 
     private final ThreadLocal<Boolean> mApplyingBatch = new ThreadLocal<Boolean>();
     private static final int SLEEP_AFTER_YIELD_DELAY = 4000;
@@ -53,10 +55,13 @@ public abstract class SQLiteContentProvider extends ContentProvider
     public boolean onCreate() {
         Context context = getContext();
         mOpenHelper = getDatabaseHelper(context);
+        mAnonOpenHelper = getAnonDatabaseHelper(context);
         return true;
     }
 
     protected abstract SQLiteOpenHelper getDatabaseHelper(Context context);
+
+    protected abstract SQLiteOpenHelper getAnonDatabaseHelper(Context context);
 
     /**
      * The equivalent of the {@link #insert} method, but invoked within a transaction.
@@ -78,6 +83,10 @@ public abstract class SQLiteContentProvider extends ContentProvider
 
     protected SQLiteOpenHelper getDatabaseHelper() {
         return mOpenHelper;
+    }
+
+    protected SQLiteOpenHelper getAnonDatabaseHelper() {
+        return mAnonOpenHelper;
     }
 
     private boolean applyingBatch() {

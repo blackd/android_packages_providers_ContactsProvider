@@ -26,6 +26,7 @@ import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.UriMatcher;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
@@ -123,12 +124,14 @@ public class SocialProvider extends ContentProvider {
     }
 
     private ContactsDatabaseHelper mDbHelper;
+    private ContactsDatabaseHelper mAnonDbHelper;
 
     /** {@inheritDoc} */
     @Override
     public boolean onCreate() {
         final Context context = getContext();
         mDbHelper = ContactsDatabaseHelper.getInstance(context);
+        mAnonDbHelper = AnonContactsDatabaseHelper.getInstance(context);
         return true;
     }
 
@@ -322,7 +325,14 @@ public class SocialProvider extends ContentProvider {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
-        final SQLiteDatabase db = mDbHelper.getReadableDatabase();
+        SQLiteDatabase db;
+        if (getContext().pffCheckCallingOrSelfPermission(android.Manifest.permission.READ_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED) {
+            db = mDbHelper.getReadableDatabase();
+        }
+        else {
+            db = mAnonDbHelper.getReadableDatabase();
+        }
         final SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
         String limit = null;
 
