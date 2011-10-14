@@ -67,6 +67,10 @@ public class ContactsUpgradeReceiver extends BroadcastReceiver {
                 helper.getWritableDatabase();
                 helper.close();
 
+                AnonContactsDatabaseHelper anonHelper = AnonContactsDatabaseHelper.getInstance(context);
+                anonHelper.getWritableDatabase();
+                anonHelper.close();
+
                 // Log the total time taken for the receiver to perform the operation
                 EventLogTags.writeContactsUpgradeReceiver(System.currentTimeMillis() - startTime);
             }

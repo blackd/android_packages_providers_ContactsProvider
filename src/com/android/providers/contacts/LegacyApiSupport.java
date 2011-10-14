@@ -32,6 +32,7 @@ import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.UriMatcher;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.SQLException;
@@ -493,6 +494,7 @@ public class LegacyApiSupport {
 
     private final Context mContext;
     private final ContactsDatabaseHelper mDbHelper;
+    private final ContactsDatabaseHelper mAnonDbHelper;
     private final ContactsProvider2 mContactsProvider;
     private final NameSplitter mPhoneticNameSplitter;
     private final GlobalSearchSupport mGlobalSearchSupport;
@@ -512,10 +514,12 @@ public class LegacyApiSupport {
 
 
     public LegacyApiSupport(Context context, ContactsDatabaseHelper contactsDatabaseHelper,
+            ContactsDatabaseHelper anonContactsDatabaseHelper,
             ContactsProvider2 contactsProvider, GlobalSearchSupport globalSearchSupport) {
         mContext = context;
         mContactsProvider = contactsProvider;
         mDbHelper = contactsDatabaseHelper;
+        mAnonDbHelper = anonContactsDatabaseHelper;
         mGlobalSearchSupport = globalSearchSupport;
 
         mPhoneticNameSplitter = new NameSplitter("", "", "", context
@@ -1606,7 +1610,16 @@ public class LegacyApiSupport {
             String sortOrder, String limit) {
         ensureDefaultAccount();
 
-        final SQLiteDatabase db = mDbHelper.getReadableDatabase();
+        ContactsDatabaseHelper dbHelper;
+        if (mContext.pffCheckCallingOrSelfPermission(android.Manifest.permission.READ_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED) {
+            dbHelper = mDbHelper;
+        }
+        else {
+            dbHelper = mAnonDbHelper;
+        }
+            
+        final SQLiteDatabase db = dbHelper.getReadableDatabase();
         SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
         String groupBy = null;
 
@@ -1748,7 +1761,7 @@ public class LegacyApiSupport {
                 if (uri.getPathSegments().size() > 2) {
                     String filterParam = uri.getLastPathSegment();
                     qb.appendWhere(" AND person =");
-                    qb.appendWhere(mDbHelper.buildPhoneLookupAsNestedQuery(filterParam));
+                    qb.appendWhere(dbHelper.buildPhoneLookupAsNestedQuery(filterParam));
                 }
                 break;
 
@@ -1900,7 +1913,7 @@ public class LegacyApiSupport {
 
             case DELETED_PEOPLE:
             case DELETED_GROUPS:
-                throw new UnsupportedOperationException(mDbHelper.exceptionMessage(uri));
+                throw new UnsupportedOperationException(dbHelper.exceptionMessage(uri));
 
             case SETTINGS:
                 copySettingsToLegacySettings();
@@ -1908,7 +1921,7 @@ public class LegacyApiSupport {
                 break;
 
             default:
-                throw new IllegalArgumentException(mDbHelper.exceptionMessage(uri));
+                throw new IllegalArgumentException(dbHelper.exceptionMessage(uri));
         }
 
         // Perform the query and set the notification uri
