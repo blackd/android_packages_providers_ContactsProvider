@@ -93,12 +93,18 @@ public abstract class SQLiteContentProvider extends ContentProvider
         return mApplyingBatch.get() != null && mApplyingBatch.get();
     }
 
+    SQLiteOpenHelper getDBHelper(String permission) {
+        return mOpenHelper;
+    }
+    
     @Override
     public Uri insert(Uri uri, ContentValues values) {
         Uri result = null;
         boolean applyingBatch = applyingBatch();
         if (!applyingBatch) {
-            mDb = mOpenHelper.getWritableDatabase();
+            //mDb = mOpenHelper.getWritableDatabase();
+            mDb = getDBHelper(android.Manifest.permission.WRITE_CONTACTS)
+                .getWritableDatabase();
             mDb.beginTransactionWithListener(this);
             try {
                 result = insertInTransaction(uri, values);
@@ -123,7 +129,9 @@ public abstract class SQLiteContentProvider extends ContentProvider
     @Override
     public int bulkInsert(Uri uri, ContentValues[] values) {
         int numValues = values.length;
-        mDb = mOpenHelper.getWritableDatabase();
+        //mDb = mOpenHelper.getWritableDatabase();
+        mDb = getDBHelper(android.Manifest.permission.WRITE_CONTACTS)
+            .getWritableDatabase();
         mDb.beginTransactionWithListener(this);
         try {
             for (int i = 0; i < numValues; i++) {
@@ -147,7 +155,9 @@ public abstract class SQLiteContentProvider extends ContentProvider
         int count = 0;
         boolean applyingBatch = applyingBatch();
         if (!applyingBatch) {
-            mDb = mOpenHelper.getWritableDatabase();
+            //mDb = mOpenHelper.getWritableDatabase();
+            mDb = getDBHelper(android.Manifest.permission.WRITE_CONTACTS)
+                .getWritableDatabase();
             mDb.beginTransactionWithListener(this);
             try {
                 count = updateInTransaction(uri, values, selection, selectionArgs);
@@ -175,7 +185,9 @@ public abstract class SQLiteContentProvider extends ContentProvider
         int count = 0;
         boolean applyingBatch = applyingBatch();
         if (!applyingBatch) {
-            mDb = mOpenHelper.getWritableDatabase();
+            //mDb = mOpenHelper.getWritableDatabase();
+            mDb = getDBHelper(android.Manifest.permission.WRITE_CONTACTS)
+                .getWritableDatabase();
             mDb.beginTransactionWithListener(this);
             try {
                 count = deleteInTransaction(uri, selection, selectionArgs);
@@ -202,7 +214,9 @@ public abstract class SQLiteContentProvider extends ContentProvider
             throws OperationApplicationException {
         int ypCount = 0;
         int opCount = 0;
-        mDb = mOpenHelper.getWritableDatabase();
+        //mDb = mOpenHelper.getWritableDatabase();
+        mDb = getDBHelper(android.Manifest.permission.WRITE_CONTACTS)
+            .getWritableDatabase();
         mDb.beginTransactionWithListener(this);
         try {
             mApplyingBatch.set(true);
